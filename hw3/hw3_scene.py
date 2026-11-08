@@ -45,15 +45,142 @@ def compose_transformations(transformations):
     """
     # HW 3.4: copy paste your HW2.3 code here
 
+    """
+        Given a list of transformations, compose them into a matrix.
+    """
     F = np.eye(4, dtype=np.float32)
+
+    for transform in transformations:
+        T = np.eye(4, dtype=np.float32)
+
+        if 'scale' in transform:
+            sx, sy, sz = transform['scale']
+
+            T[0, 0] = sx
+            T[1, 1] = sy
+            T[2, 2] = sz
+
+        elif 'translate' in transform:
+            tx, ty, tz = transform['translate']
+
+            T[0, 3] = tx
+            T[1, 3] = ty
+            T[2, 3] = tz
+
+        elif 'rotate_x' in transform:
+            angle = math.radians(transform['rotate_x'][0])
+            c = math.cos(angle)
+            s = math.sin(angle)
+
+            T[1, 1] = c
+            T[1, 2] = -s
+            T[2, 1] = s
+            T[2, 2] = c
+
+        elif 'rotate_y' in transform:
+            angle = math.radians(transform['rotate_y'][0])
+            c = math.cos(angle)
+            s = math.sin(angle)
+
+            T[0, 0] = c
+            T[0, 2] = s
+            T[2, 0] = -s
+            T[2, 2] = c
+
+        elif 'rotate_z' in transform:
+            angle = math.radians(transform['rotate_z'][0])
+            c = math.cos(angle)
+            s = math.sin(angle)
+
+            T[0, 0] = c
+            T[0, 1] = -s
+            T[1, 0] = s
+            T[1, 1] = c
+
+        elif 'lookat' in transform:
+            params = transform['lookat']
+
+            position = np.array(params['position'], dtype=np.float32)
+            target = np.array(params['target'], dtype=np.float32)
+            up = np.array(params['up'], dtype=np.float32)
+
+            # Direction from camera to target
+            d = target - position
+            d = d / np.linalg.norm(d)
+
+            # Camera's right direction
+            r = np.cross(d, up)
+            r = r / np.linalg.norm(r)
+
+            # Corrected up direction
+            u = np.cross(r, d)
+
+            # Construct camera-to-world matrix
+            T[:3, 0] = r
+            T[:3, 1] = u
+            T[:3, 2] = -d
+            T[:3, 3] = position
+
+        # Apply transformations in the order listed
+        F = T @ F
+
     return F
 
 def interpolate_transformation(transform_keyframes, t):
     # HW 3.4: copy your HW2.4 code here.
 
     # create a new transform from the two keyframes
-    interp_transforms = []
-    return interp_transforms
+    if not transform_keyframes:
+        return []
+
+    # Find the two keyframes surrounding t
+    for i in range(len(transform_keyframes) - 1):
+        k0 = transform_keyframes[i]
+        k1 = transform_keyframes[i + 1]
+
+        t0 = k0['time']
+        t1 = k1['time']
+
+        if t0 <= t <= t1:
+            # Calculate interpolation factor
+            alpha = (t - t0) / (t1 - t0)
+
+            interp_transforms = []
+
+            # Interpolate each corresponding transformation
+            for trans0, trans1 in zip(k0['transform'], k1['transform']):
+                transform_type = list(trans0.keys())[0]
+
+                v0 = trans0[transform_type]
+                v1 = trans1[transform_type]
+
+                if transform_type == 'lookat':
+                    result = {}
+
+                    for key in ['position', 'target', 'up']:
+                        a = np.array(v0[key], dtype=np.float32)
+                        b = np.array(v1[key], dtype=np.float32)
+
+                        result[key] = (
+                            (1 - alpha) * a + alpha * b
+                        ).tolist()
+
+                else:
+                    a = np.array(v0, dtype=np.float32)
+                    b = np.array(v1, dtype=np.float32)
+
+                    result = (
+                        (1 - alpha) * a + alpha * b
+                    ).tolist()
+
+                interp_transforms.append({
+                    transform_type: result
+                })
+
+            return interp_transforms
+
+    # If t is outside the keyframe interval
+    return transform_keyframes[-1]['transform']
 
 def get_transformation(obj, t):
     transforms = obj.get('transform', [])
